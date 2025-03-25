@@ -1500,7 +1500,7 @@ def evdev_to_usb_hid(event: KeyEvent) -> tuple[int | None, str | None]:
         _logger.warning(f"Unsupported key pressed: 0x{scancode:02X}")
     else:
         _logger.debug(
-            f"Converted evdev scancode 0x{scancode:02X} ({key_name}) to HID UsageID 0x{hid_usage_id:02X} ({hid_usage_name or "N/A"})"
+            f"Converted evdev scancode 0x{scancode:02X} ({key_name}) to HID UsageID 0x{hid_usage_id:02X} ({hid_usage_name or 'N/A'})"
         )
     return hid_usage_id, hid_usage_name
 

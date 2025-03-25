@@ -2,7 +2,8 @@ from functools import lru_cache
 
 from adafruit_hid.consumer_control_code import ConsumerControlCode
 from adafruit_hid.keycode import Keycode, MouseButton
-from evdev import InputEvent, KeyEvent, RelEvent
+from evdev import InputEvent, KeyEvent, RelEvent, AbsEvent, AbsInfo
+from typing import Union
 
 from .logging import get_logger
 
@@ -1040,7 +1041,54 @@ class ecodes:
     SND_CNT = SND_MAX + 1
 
 
-_EVDEV_TO_USB_HID: dict[int, int] = {
+class GamepadButton:
+    """HID Gamepad button codes"""
+
+    A = 0x01
+    B = 0x02
+    X = 0x04
+    Y = 0x08
+    L1 = 0x10  # Left Bumper
+    R1 = 0x20  # Right Bumper
+    SELECT = 0x40
+    START = 0x80
+    GUIDE = 0x0100
+    L3 = 0x0200  # Left Stick Press
+    R3 = 0x0400  # Right Stick Press
+    L2 = 0x0800  # Left Trigger Digital
+    R2 = 0x1000  # Right Trigger Digital
+    C = 0x2000
+    Z = 0x4000
+    BASE1 = 0x8000
+    BASE2 = 0x10000
+    BASE3 = 0x20000
+    BASE4 = 0x40000
+    BASE5 = 0x80000
+    BASE6 = 0x100000
+    DEAD = 0x200000
+
+
+class DigitizerButton:
+    """HID Digitizer button codes"""
+
+    TOOL_PEN = 0x01
+    TOOL_RUBBER = 0x02
+    TOOL_BRUSH = 0x03
+    TOOL_PENCIL = 0x04
+    TOOL_AIRBRUSH = 0x05
+    TOOL_FINGER = 0x06
+    TOOL_MOUSE = 0x07
+    TOOL_DOUBLETAP = 0x08
+    TOOL_TRIPLETAP = 0x09
+    TOOL_QUADTAP = 0x0A
+    TOOL_QUINTTAP = 0x0B
+    TOUCH = 0x10
+    STYLUS = 0x20
+    STYLUS2 = 0x40
+
+
+# Keyboard key mappings
+KEYBOARD_MAP: dict[int, int] = {
     ecodes.KEY_A: Keycode.A,
     ecodes.KEY_B: Keycode.B,
     ecodes.KEY_C: Keycode.C,
@@ -1161,10 +1209,23 @@ _EVDEV_TO_USB_HID: dict[int, int] = {
     ecodes.KEY_RIGHTSHIFT: Keycode.RIGHT_SHIFT,
     ecodes.KEY_RIGHTALT: Keycode.RIGHT_ALT,
     ecodes.KEY_RIGHTMETA: Keycode.RIGHT_GUI,
-    # Mouse buttons
+}
+_KEYBOARD_KEYS = set(KEYBOARD_MAP.keys())
+
+# Mouse button mappings
+MOUSE_MAP: dict[int, int] = {
     ecodes.BTN_LEFT: MouseButton.LEFT,
     ecodes.BTN_RIGHT: MouseButton.RIGHT,
     ecodes.BTN_MIDDLE: MouseButton.MIDDLE,
+    ecodes.BTN_BACK: MouseButton.BACK,
+    ecodes.BTN_FORWARD: MouseButton.FORWARD,
+    ecodes.BTN_TASK: MouseButton.TASK,
+    ecodes.BTN_SIDE: MouseButton.SIDE,
+    ecodes.BTN_EXTRA: MouseButton.EXTRA,
+}
+_MOUSE_BUTTONS = set(MOUSE_MAP.keys())
+
+CONSUMER_MAP: dict[int, int] = {
     # Mapping from evdev ecodes to HID UsageIDs from consumer page (0x0C): https://github.com/torvalds/linux/blob/11d3f72613957cba0783938a1ceddffe7dbbf5a1/drivers/hid/hid-input.c#L1069
     ecodes.KEY_POWER: ConsumerControlCode.POWER,
     ecodes.KEY_RESTART: ConsumerControlCode.RESET,
@@ -1310,181 +1371,196 @@ _EVDEV_TO_USB_HID: dict[int, int] = {
     ecodes.KEY_KBDINPUTASSIST_CANCEL: ConsumerControlCode.KEYBOARD_INPUT_ASSIST_CANCEL,
     ecodes.KEY_SCALE: ConsumerControlCode.AC_DESKTOP_SHOW_ALL_WINDOWS,
 }
-"""Mapping from evdev ecode to HID UsageID"""
+_CONSUMER_KEYS = set(CONSUMER_MAP.keys())
 
 
-_CONSUMER_KEYS = set(
-    (
-        ecodes.KEY_POWER,
-        ecodes.KEY_RESTART,
-        ecodes.KEY_SLEEP,
-        ecodes.BTN_MISC,
-        ecodes.KEY_MENU,
-        ecodes.KEY_SELECT,
-        ecodes.KEY_INFO,
-        ecodes.KEY_SUBTITLE,
-        ecodes.KEY_VCR,
-        ecodes.KEY_CAMERA,
-        ecodes.KEY_RED,
-        ecodes.KEY_GREEN,
-        ecodes.KEY_BLUE,
-        ecodes.KEY_YELLOW,
-        ecodes.KEY_ASPECT_RATIO,
-        ecodes.KEY_BRIGHTNESSUP,
-        ecodes.KEY_BRIGHTNESSDOWN,
-        ecodes.KEY_BRIGHTNESS_TOGGLE,
-        ecodes.KEY_BRIGHTNESS_MIN,
-        ecodes.KEY_BRIGHTNESS_MAX,
-        ecodes.KEY_BRIGHTNESS_AUTO,
-        ecodes.KEY_CAMERA_ACCESS_ENABLE,
-        ecodes.KEY_CAMERA_ACCESS_DISABLE,
-        ecodes.KEY_CAMERA_ACCESS_TOGGLE,
-        ecodes.KEY_KBDILLUMUP,
-        ecodes.KEY_KBDILLUMDOWN,
-        ecodes.KEY_KBDILLUMTOGGLE,
-        ecodes.KEY_VIDEO_NEXT,
-        ecodes.KEY_LAST,
-        ecodes.KEY_PC,
-        ecodes.KEY_TV,
-        ecodes.KEY_WWW,
-        ecodes.KEY_DVD,
-        ecodes.KEY_PHONE,
-        ecodes.KEY_PROGRAM,
-        ecodes.KEY_VIDEOPHONE,
-        ecodes.KEY_GAMES,
-        ecodes.KEY_MEMO,
-        ecodes.KEY_CD,
-        ecodes.KEY_TUNER,
-        ecodes.KEY_EXIT,
-        ecodes.KEY_HELP,
-        ecodes.KEY_TAPE,
-        ecodes.KEY_TV2,
-        ecodes.KEY_SAT,
-        ecodes.KEY_PVR,
-        ecodes.KEY_CHANNELUP,
-        ecodes.KEY_CHANNELDOWN,
-        ecodes.KEY_VCR2,
-        ecodes.KEY_PLAY,
-        ecodes.KEY_PAUSE,
-        ecodes.KEY_RECORD,
-        ecodes.KEY_FASTFORWARD,
-        ecodes.KEY_REWIND,
-        ecodes.KEY_NEXTSONG,
-        ecodes.KEY_PREVIOUSSONG,
-        ecodes.KEY_STOPCD,
-        ecodes.KEY_EJECTCD,
-        ecodes.KEY_MEDIA_REPEAT,
-        ecodes.KEY_SHUFFLE,
-        ecodes.KEY_SLOW,
-        ecodes.KEY_PLAYPAUSE,
-        ecodes.KEY_VOICECOMMAND,
-        ecodes.KEY_DICTATE,
-        ecodes.KEY_EMOJI_PICKER,
-        ecodes.KEY_MUTE,
-        ecodes.KEY_BASSBOOST,
-        ecodes.KEY_VOLUMEUP,
-        ecodes.KEY_VOLUMEDOWN,
-        ecodes.KEY_BUTTONCONFIG,
-        ecodes.KEY_BOOKMARKS,
-        ecodes.KEY_CONFIG,
-        ecodes.KEY_WORDPROCESSOR,
-        ecodes.KEY_EDITOR,
-        ecodes.KEY_SPREADSHEET,
-        ecodes.KEY_GRAPHICSEDITOR,
-        ecodes.KEY_PRESENTATION,
-        ecodes.KEY_DATABASE,
-        ecodes.KEY_MAIL,
-        ecodes.KEY_NEWS,
-        ecodes.KEY_VOICEMAIL,
-        ecodes.KEY_ADDRESSBOOK,
-        ecodes.KEY_CALENDAR,
-        ecodes.KEY_TASKMANAGER,
-        ecodes.KEY_JOURNAL,
-        ecodes.KEY_FINANCE,
-        ecodes.KEY_CALC,
-        ecodes.KEY_PLAYER,
-        ecodes.KEY_FILE,
-        ecodes.KEY_CHAT,
-        ecodes.KEY_LOGOFF,
-        ecodes.KEY_COFFEE,
-        ecodes.KEY_CONTROLPANEL,
-        ecodes.KEY_APPSELECT,
-        ecodes.KEY_NEXT,
-        ecodes.KEY_PREVIOUS,
-        ecodes.KEY_DOCUMENTS,
-        ecodes.KEY_SPELLCHECK,
-        ecodes.KEY_KEYBOARD,
-        ecodes.KEY_SCREENSAVER,
-        ecodes.KEY_IMAGES,
-        ecodes.KEY_AUDIO,
-        ecodes.KEY_VIDEO,
-        ecodes.KEY_MESSENGER,
-        ecodes.KEY_ASSISTANT,
-        ecodes.KEY_NEW,
-        ecodes.KEY_OPEN,
-        ecodes.KEY_CLOSE,
-        ecodes.KEY_SAVE,
-        ecodes.KEY_PROPS,
-        ecodes.KEY_UNDO,
-        ecodes.KEY_COPY,
-        ecodes.KEY_CUT,
-        ecodes.KEY_PASTE,
-        ecodes.KEY_FIND,
-        ecodes.KEY_SEARCH,
-        ecodes.KEY_GOTO,
-        ecodes.KEY_HOMEPAGE,
-        ecodes.KEY_BACK,
-        ecodes.KEY_FORWARD,
-        ecodes.KEY_STOP,
-        ecodes.KEY_REFRESH,
-        ecodes.KEY_ZOOMIN,
-        ecodes.KEY_ZOOMOUT,
-        ecodes.KEY_ZOOMRESET,
-        ecodes.KEY_FULL_SCREEN,
-        ecodes.KEY_SCROLLUP,
-        ecodes.KEY_SCROLLDOWN,
-        ecodes.KEY_EDIT,
-        ecodes.KEY_CANCEL,
-        ecodes.KEY_REDO,
-        ecodes.KEY_REPLY,
-        ecodes.KEY_FORWARDMAIL,
-        ecodes.KEY_SEND,
-        ecodes.KEY_KBD_LAYOUT_NEXT,
-        ecodes.KEY_ALL_APPLICATIONS,
-        ecodes.KEY_KBDINPUTASSIST_PREV,
-        ecodes.KEY_KBDINPUTASSIST_NEXT,
-        ecodes.KEY_KBDINPUTASSIST_PREVGROUP,
-        ecodes.KEY_KBDINPUTASSIST_NEXTGROUP,
-        ecodes.KEY_KBDINPUTASSIST_ACCEPT,
-        ecodes.KEY_KBDINPUTASSIST_CANCEL,
-        ecodes.KEY_SCALE,
-    )
-)
-"""evdev scancodes that are mapped to USB HUT (HID Uage Table) UsageIDs from consumer page (0x0C)"""
+# Gamepad button mappings
+GAMEPAD_MAP = {
+    ecodes.BTN_SOUTH: GamepadButton.A,
+    ecodes.BTN_EAST: GamepadButton.B,
+    ecodes.BTN_NORTH: GamepadButton.X,
+    ecodes.BTN_WEST: GamepadButton.Y,
+    ecodes.BTN_TL: GamepadButton.L1,
+    ecodes.BTN_TR: GamepadButton.R1,
+    ecodes.BTN_SELECT: GamepadButton.SELECT,
+    ecodes.BTN_START: GamepadButton.START,
+    ecodes.BTN_MODE: GamepadButton.GUIDE,
+    ecodes.BTN_THUMBL: GamepadButton.L3,
+    ecodes.BTN_THUMBR: GamepadButton.R3,
+    ecodes.BTN_TL2: GamepadButton.L2,
+    ecodes.BTN_TR2: GamepadButton.R2,
+    ecodes.BTN_C: GamepadButton.C,
+    ecodes.BTN_Z: GamepadButton.Z,
+    ecodes.BTN_BASE: GamepadButton.BASE1,
+    ecodes.BTN_BASE2: GamepadButton.BASE2,
+    ecodes.BTN_BASE3: GamepadButton.BASE3,
+    ecodes.BTN_BASE4: GamepadButton.BASE4,
+    ecodes.BTN_BASE5: GamepadButton.BASE5,
+    ecodes.BTN_BASE6: GamepadButton.BASE6,
+    ecodes.BTN_DEAD: GamepadButton.DEAD,
+}
+_GAMEPAD_BUTTONS = set(GAMEPAD_MAP.keys())
 
 
-_MOUSE_BUTTONS = set(
-    (
-        ecodes.BTN_LEFT,
-        ecodes.BTN_RIGHT,
-        ecodes.BTN_MIDDLE,
-    )
-)
-"""Mouse button ecodes"""
+# Gamepad axis mappings
+GAMEPAD_AXIS_MAP = {
+    # Main analog sticks
+    ecodes.ABS_X: ("lx", -32768, 32767),  # Left stick X
+    ecodes.ABS_Y: ("ly", -32768, 32767),  # Left stick Y
+    ecodes.ABS_RX: ("rx", -32768, 32767),  # Right stick X
+    ecodes.ABS_RY: ("ry", -32768, 32767),  # Right stick Y
+    # Analog triggers
+    ecodes.ABS_Z: ("lt", 0, 255),  # Left Trigger Analog
+    ecodes.ABS_RZ: ("rt", 0, 255),  # Right Trigger Analog
+    # D-pad as HAT switch
+    ecodes.ABS_HAT0X: ("hat_x", -1, 1),  # D-pad X axis
+    ecodes.ABS_HAT0Y: ("hat_y", -1, 1),  # D-pad Y axis
+    # Additional axes
+    ecodes.ABS_THROTTLE: ("throttle", 0, 255),  # Throttle axis
+    ecodes.ABS_RUDDER: ("rudder", 0, 255),  # Rudder control
+    ecodes.ABS_WHEEL: ("wheel", -32768, 32767),  # Steering wheel
+    ecodes.ABS_GAS: ("gas", 0, 255),  # Gas pedal
+    ecodes.ABS_BRAKE: ("brake", 0, 255),  # Brake pedal
+    # Additional HAT switches
+    ecodes.ABS_HAT1X: ("hat1_x", -1, 1),  # Second HAT X
+    ecodes.ABS_HAT1Y: ("hat1_y", -1, 1),  # Second HAT Y
+    ecodes.ABS_HAT2X: ("hat2_x", -1, 1),  # Third HAT X
+    ecodes.ABS_HAT2Y: ("hat2_y", -1, 1),  # Third HAT Y
+    ecodes.ABS_HAT3X: ("hat3_x", -1, 1),  # Fourth HAT X
+    ecodes.ABS_HAT3Y: ("hat3_y", -1, 1),  # Fourth HAT Y
+}
+
+
+# Digitizer button mappings
+DIGITIZER_MAP = {
+    ecodes.BTN_TOOL_PEN: DigitizerButton.TOOL_PEN,
+    ecodes.BTN_TOOL_RUBBER: DigitizerButton.TOOL_RUBBER,
+    ecodes.BTN_TOOL_BRUSH: DigitizerButton.TOOL_BRUSH,
+    ecodes.BTN_TOOL_PENCIL: DigitizerButton.TOOL_PENCIL,
+    ecodes.BTN_TOOL_AIRBRUSH: DigitizerButton.TOOL_AIRBRUSH,
+    ecodes.BTN_TOOL_FINGER: DigitizerButton.TOOL_FINGER,
+    ecodes.BTN_TOOL_MOUSE: DigitizerButton.TOOL_MOUSE,
+    ecodes.BTN_TOOL_DOUBLETAP: DigitizerButton.TOOL_DOUBLETAP,
+    ecodes.BTN_TOOL_TRIPLETAP: DigitizerButton.TOOL_TRIPLETAP,
+    ecodes.BTN_TOOL_QUADTAP: DigitizerButton.TOOL_QUADTAP,
+    ecodes.BTN_TOOL_QUINTTAP: DigitizerButton.TOOL_QUINTTAP,
+    ecodes.BTN_TOUCH: DigitizerButton.TOUCH,
+    ecodes.BTN_STYLUS: DigitizerButton.STYLUS,
+    ecodes.BTN_STYLUS2: DigitizerButton.STYLUS2,
+}
+_DIGITIZER_BUTTONS = set(DIGITIZER_MAP.keys())
+
+
+# Digitizer axis mappings
+DIGITIZER_AXIS_MAP = {
+    ecodes.ABS_PRESSURE: ("pressure", 0, 8191),  # Pressure sensitivity
+    ecodes.ABS_DISTANCE: ("distance", 0, 255),  # Hover distance
+    ecodes.ABS_TILT_X: ("tilt_x", -127, 127),  # X tilt
+    ecodes.ABS_TILT_Y: ("tilt_y", -127, 127),  # Y tilt
+    ecodes.ABS_MISC: ("misc", 0, 65535),  # Additional data
+    ecodes.ABS_MT_SLOT: ("slot", 0, 15),  # Active slot index
+    ecodes.ABS_MT_TOUCH_MAJOR: ("touch_major", 0, 255),  # Major axis of touch
+    ecodes.ABS_MT_TOUCH_MINOR: ("touch_minor", 0, 255),  # Minor axis of touch
+    ecodes.ABS_MT_WIDTH_MAJOR: ("width_major", 0, 255),  # Major axis of tool
+    ecodes.ABS_MT_WIDTH_MINOR: ("width_minor", 0, 255),  # Minor axis of tool
+    ecodes.ABS_MT_ORIENTATION: ("orientation", -127, 127),  # Orientation
+    ecodes.ABS_MT_POSITION_X: ("position_x", 0, 32767),  # X position
+    ecodes.ABS_MT_POSITION_Y: ("position_y", 0, 32767),  # Y position
+    ecodes.ABS_MT_TOOL_TYPE: ("tool_type", 0, 15),  # Tool type
+    ecodes.ABS_MT_BLOB_ID: ("blob_id", 0, 65535),  # Blob ID
+    ecodes.ABS_MT_TRACKING_ID: ("tracking_id", 0, 65535),  # Tracking ID
+    ecodes.ABS_MT_PRESSURE: ("mt_pressure", 0, 255),  # Pressure
+}
 
 
 def evdev_to_usb_hid(event: KeyEvent) -> tuple[int | None, str | None]:
     scancode: int = event.scancode
     key_name = find_key_name(event)
-    hid_usage_id = _EVDEV_TO_USB_HID.get(scancode, None)
-    hid_usage_name = find_usage_name(event, hid_usage_id)
-    if any(item is None for item in (key_name, hid_usage_id, hid_usage_name)):
+    hid_usage_id = None
+    hid_usage_name = None
+
+    # Check different maps based on event type
+    if is_keyboard_key(event):
+        hid_usage_id = KEYBOARD_MAP.get(scancode, None)
+        hid_usage_name = find_usage_name(Keycode, hid_usage_id)
+    elif is_mouse_button(event):
+        hid_usage_id = MOUSE_MAP.get(scancode, None)
+        hid_usage_name = find_usage_name(MouseButton, hid_usage_id)
+    elif is_consumer_key(event):
+        hid_usage_id = CONSUMER_MAP.get(scancode, None)
+        hid_usage_name = find_usage_name(ConsumerControlCode, hid_usage_id)
+    elif is_gamepad_button(event):
+        hid_usage_id = GAMEPAD_MAP.get(scancode, None)
+        hid_usage_name = find_usage_name(GamepadButton, hid_usage_id)
+    elif is_digitizer_button(event):
+        hid_usage_id = DIGITIZER_MAP.get(scancode, None)
+        hid_usage_name = find_usage_name(DigitizerButton, hid_usage_id)
+
+    if key_name is None or hid_usage_id is None:
         _logger.warning(f"Unsupported key pressed: 0x{scancode:02X}")
     else:
         _logger.debug(
-            f"Converted evdev scancode 0x{scancode:02X} ({key_name}) to HID UsageID 0x{hid_usage_id:02X} ({hid_usage_name})"
+            f"Converted evdev scancode 0x{scancode:02X} ({key_name}) to HID UsageID 0x{hid_usage_id:02X} ({hid_usage_name or "N/A"})"
         )
     return hid_usage_id, hid_usage_name
+
+
+def is_keyboard_key(event: KeyEvent) -> bool:
+    """Check if event is a keyboard key."""
+    return event.scancode in _KEYBOARD_KEYS
+
+
+def is_mouse_button(event: KeyEvent) -> bool:
+    return event.scancode in _MOUSE_BUTTONS
+
+
+def is_mouse_movement(event: RelEvent) -> bool:
+    """Check if event is mouse movement."""
+    return event.code in (ecodes.REL_X, ecodes.REL_Y, ecodes.REL_WHEEL)
+
+
+def get_mouse_movement(event: RelEvent) -> tuple[int, int, int]:
+    input_event: InputEvent = event.event
+    x, y, mwheel = 0, 0, 0
+    if input_event.code == ecodes.REL_X:
+        x = input_event.value
+    elif input_event.code == ecodes.REL_Y:
+        y = input_event.value
+    elif input_event.code == ecodes.REL_WHEEL:
+        mwheel = input_event.value
+    return x, y, mwheel
+
+
+def is_consumer_key(event: KeyEvent) -> bool:
+    return event.scancode in _CONSUMER_KEYS
+
+
+def is_digitizer_event(event: Union[KeyEvent, AbsEvent]) -> bool:
+    """Check if event is from a digitizer device."""
+    if isinstance(event, KeyEvent):
+        return is_digitizer_button(event)
+    elif isinstance(event, AbsEvent):
+        return event.code in DIGITIZER_AXIS_MAP
+    return False
+
+
+def is_digitizer_button(event: KeyEvent) -> bool:
+    """Check if event is a digitizer button press."""
+    return event.scancode in _DIGITIZER_BUTTONS
+
+
+def is_gamepad_event(event: Union[KeyEvent, AbsEvent]) -> bool:
+    """Check if event is from a gamepad device."""
+    if isinstance(event, KeyEvent):
+        return is_gamepad_button(event)
+    elif isinstance(event, AbsEvent):
+        return event.code in GAMEPAD_AXIS_MAP
+    return False
+
+
+def is_gamepad_button(event: KeyEvent) -> bool:
+    """Check if event is a gamepad button press."""
+    return event.scancode in _GAMEPAD_BUTTONS
 
 
 def find_key_name(event: KeyEvent) -> str | None:
@@ -1497,8 +1573,9 @@ def find_key_name(event: KeyEvent) -> str | None:
     return None
 
 
-def find_usage_name(event: KeyEvent, hid_usage_id: int | None) -> str | None:
-    code_type = _get_hid_code_type(event)
+def find_usage_name(code_type: type, hid_usage_id: int | None) -> str | None:
+    if hid_usage_id is None:
+        return None
     for attribute in _cached_dir(code_type):
         if _cached_getattr(code_type, attribute) == hid_usage_id:
             return attribute
@@ -1517,31 +1594,40 @@ def _cached_dir(
     return dir(class_type)
 
 
-def _get_hid_code_type(
-    event: KeyEvent,
-) -> type[ConsumerControlCode] | type[Keycode] | type[MouseButton]:
-    if is_consumer_key(event):
-        return ConsumerControlCode
-    elif is_mouse_button(event):
-        return MouseButton
-    return Keycode
+def scale_axis_value(event: AbsEvent) -> int | None:
+    """Scale axis value according to its mapping."""
+    mapping = get_axis_mapping(event)
+    if mapping is None:
+        return None
+
+    _, min_val, max_val = mapping
+    return scale_axis(event.value, event.info, min_val, max_val)
 
 
-def is_mouse_button(event: KeyEvent) -> bool:
-    return event.scancode in _MOUSE_BUTTONS
+def get_axis_mapping(event: AbsEvent) -> tuple[str, int, int] | None:
+    """Get axis mapping information for gamepad or digitizer axes."""
+    if is_gamepad_event(event):
+        return GAMEPAD_AXIS_MAP.get(event.code)
+    elif is_digitizer_event(event):
+        return DIGITIZER_AXIS_MAP.get(event.code)
+    return None
 
 
-def is_consumer_key(event: KeyEvent) -> bool:
-    return event.scancode in _CONSUMER_KEYS
+def scale_axis(value: int, axis_info: AbsInfo, target_min: int, target_max: int) -> int:
+    """
+    Scale an axis value from its input range to target range.
 
+    :param value: Raw axis value
+    :param axis_info: AbsInfo containing min/max/resolution info
+    :param target_min: Target minimum value
+    :param target_max: Target maximum value
+    :return: Scaled value
+    """
+    source_span = axis_info.max - axis_info.min
+    target_span = target_max - target_min
 
-def get_mouse_movement(event: RelEvent) -> tuple[int, int, int]:
-    input_event: InputEvent = event.event
-    x, y, mwheel = 0, 0, 0
-    if input_event.code == ecodes.REL_X:
-        x = input_event.value
-    elif input_event.code == ecodes.REL_Y:
-        y = input_event.value
-    elif input_event.code == ecodes.REL_WHEEL:
-        mwheel = input_event.value
-    return x, y, mwheel
+    if source_span == 0:
+        return target_min
+
+    scaled = (value - axis_info.min) * target_span // source_span + target_min
+    return min(max(scaled, target_min), target_max)

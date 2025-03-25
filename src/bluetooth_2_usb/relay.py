@@ -5,19 +5,38 @@ import re
 from typing import Optional, Union
 
 from adafruit_hid.consumer_control import ConsumerControl
+from adafruit_hid.digitizer import Digitizer
+from adafruit_hid.gamepad import Gamepad
 from adafruit_hid.keyboard import Keyboard
 from adafruit_hid.mouse import Mouse
-from evdev import InputDevice, InputEvent, KeyEvent, RelEvent, categorize, list_devices
+from evdev import (
+    InputDevice,
+    InputEvent,
+    KeyEvent,
+    RelEvent,
+    AbsEvent,
+    categorize,
+    list_devices,
+)
 import pyudev
 import usb_hid
 from usb_hid import Device
+
 
 from .evdev import (
     evdev_to_usb_hid,
     find_key_name,
     get_mouse_movement,
     is_consumer_key,
+    is_keyboard_key,
     is_mouse_button,
+    is_gamepad_button,
+    is_digitizer_button,
+    is_gamepad_event,
+    is_digitizer_event,
+    scale_axis_value,
+    GAMEPAD_AXIS_MAP,
+    DIGITIZER_AXIS_MAP,
 )
 from .logging import get_logger
 
@@ -40,6 +59,8 @@ class GadgetManager:
             "keyboard": None,
             "mouse": None,
             "consumer": None,
+            "gamepad": None,
+            "digitizer": None,
         }
         self._enabled = False
 
@@ -53,12 +74,22 @@ class GadgetManager:
         except Exception as ex:
             _logger.debug(f"usb_hid.disable() failed or was already disabled: {ex}")
 
-        usb_hid.enable([Device.BOOT_MOUSE, Device.KEYBOARD, Device.CONSUMER_CONTROL])  # type: ignore
+        usb_hid.enable(
+            [
+                Device.BOOT_MOUSE,
+                Device.KEYBOARD,
+                Device.CONSUMER_CONTROL,
+                Device.GAMEPAD,
+                Device.DIGITIZER,
+            ]
+        )  # type: ignore
         enabled_devices = list(usb_hid.devices)  # type: ignore
 
         self._gadgets["keyboard"] = Keyboard(enabled_devices)
         self._gadgets["mouse"] = Mouse(enabled_devices)
         self._gadgets["consumer"] = ConsumerControl(enabled_devices)
+        self._gadgets["gamepad"] = Gamepad(enabled_devices)
+        self._gadgets["digitizer"] = Digitizer(enabled_devices)
         self._enabled = True
 
         _logger.debug(f"USB HID gadgets re-initialized: {enabled_devices}")
@@ -70,7 +101,7 @@ class GadgetManager:
         :return: A Keyboard object, or None if not initialized
         :rtype: Keyboard | None
         """
-        return self._gadgets["keyboard"]
+        return self._gadgets.get("keyboard") if self._enabled else None
 
     def get_mouse(self) -> Optional[Mouse]:
         """
@@ -79,7 +110,7 @@ class GadgetManager:
         :return: A Mouse object, or None if not initialized
         :rtype: Mouse | None
         """
-        return self._gadgets["mouse"]
+        return self._gadgets.get("mouse") if self._enabled else None
 
     def get_consumer(self) -> Optional[ConsumerControl]:
         """
@@ -88,7 +119,15 @@ class GadgetManager:
         :return: A ConsumerControl object, or None if not initialized
         :rtype: ConsumerControl | None
         """
-        return self._gadgets["consumer"]
+        return self._gadgets.get("consumer") if self._enabled else None
+
+    def get_gamepad(self) -> Optional[Gamepad]:
+        """Get the Gamepad gadget if enabled."""
+        return self._gadgets.get("gamepad") if self._enabled else None
+
+    def get_digitizer(self) -> Optional[Digitizer]:
+        """Get the Digitizer gadget if enabled."""
+        return self._gadgets.get("digitizer") if self._enabled else None
 
 
 class ShortcutToggler:
@@ -524,6 +563,8 @@ def relay_event(event: InputEvent, gadget_manager: GadgetManager) -> None:
         move_mouse(event, gadget_manager)
     elif isinstance(event, KeyEvent):
         send_key_event(event, gadget_manager)
+    elif isinstance(event, AbsEvent):
+        send_abs_event(event, gadget_manager)
 
 
 def move_mouse(event: RelEvent, gadget_manager: GadgetManager) -> None:
@@ -540,6 +581,41 @@ def move_mouse(event: RelEvent, gadget_manager: GadgetManager) -> None:
 
     x, y, mwheel = get_mouse_movement(event)
     mouse.move(x, y, mwheel)
+
+
+def send_abs_event(event: AbsEvent, gadget_manager: GadgetManager) -> None:
+    """
+    Relay absolute axis events to gamepad or digitizer.
+
+    :param event: The AbsEvent to process
+    :param gadget_manager: GadgetManager with references to HID devices
+    :raises RuntimeError: If appropriate gadget is not available
+    """
+    scaled_value = scale_axis_value(event)
+    if scaled_value is None:
+        return
+
+    if is_gamepad_event(event):
+        gamepad = gadget_manager.get_gamepad()
+        if gamepad is None:
+            raise RuntimeError("Gamepad gadget not initialized or manager not enabled.")
+
+        mapping = GAMEPAD_AXIS_MAP.get(event.code)
+        if mapping:
+            axis_name, _, _ = mapping
+            gamepad.move_axes(**{axis_name: scaled_value})
+
+    elif is_digitizer_event(event):
+        digitizer = gadget_manager.get_digitizer()
+        if digitizer is None:
+            raise RuntimeError(
+                "Digitizer gadget not initialized or manager not enabled."
+            )
+
+        mapping = DIGITIZER_AXIS_MAP.get(event.code)
+        if mapping:
+            axis_name, _, _ = mapping
+            digitizer.update(**{axis_name: scaled_value})
 
 
 def send_key_event(event: KeyEvent, gadget_manager: GadgetManager) -> None:
@@ -568,19 +644,25 @@ def send_key_event(event: KeyEvent, gadget_manager: GadgetManager) -> None:
 
 def get_output_device(
     event: KeyEvent, gadget_manager: GadgetManager
-) -> Union[ConsumerControl, Keyboard, Mouse, None]:
+) -> Union[ConsumerControl, Keyboard, Mouse, Gamepad, Digitizer, None]:
     """
     Determine which HID gadget to target for the given key event.
 
     :param event: The KeyEvent to process
     :param gadget_manager: GadgetManager for HID references
-    :return: A ConsumerControl, Mouse, or Keyboard object, or None if not found
+    :return: An appropriate HID device object, or None if not found
     """
-    if is_consumer_key(event):
-        return gadget_manager.get_consumer()
-    elif is_mouse_button(event):
+    if is_mouse_button(event):
         return gadget_manager.get_mouse()
-    return gadget_manager.get_keyboard()
+    elif is_digitizer_button(event):
+        return gadget_manager.get_digitizer()
+    elif is_keyboard_key(event):
+        return gadget_manager.get_keyboard()
+    elif is_consumer_key(event):
+        return gadget_manager.get_consumer()
+    elif is_gamepad_button(event):
+        return gadget_manager.get_gamepad()
+    return None
 
 
 class UdcStateMonitor:

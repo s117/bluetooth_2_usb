@@ -1516,7 +1516,7 @@ def is_mouse_button(event: KeyEvent) -> bool:
 
 def is_mouse_movement(event: RelEvent) -> bool:
     """Check if event is mouse movement."""
-    return event.code in (ecodes.REL_X, ecodes.REL_Y, ecodes.REL_WHEEL)
+    return event.event.code in (ecodes.REL_X, ecodes.REL_Y, ecodes.REL_WHEEL)
 
 
 def get_mouse_movement(event: RelEvent) -> tuple[int, int, int]:
@@ -1540,7 +1540,7 @@ def is_digitizer_event(event: Union[KeyEvent, AbsEvent]) -> bool:
     if isinstance(event, KeyEvent):
         return is_digitizer_button(event)
     elif isinstance(event, AbsEvent):
-        return event.code in DIGITIZER_AXIS_MAP
+        return event.event.code in DIGITIZER_AXIS_MAP
     return False
 
 
@@ -1554,7 +1554,7 @@ def is_gamepad_event(event: Union[KeyEvent, AbsEvent]) -> bool:
     if isinstance(event, KeyEvent):
         return is_gamepad_button(event)
     elif isinstance(event, AbsEvent):
-        return event.code in GAMEPAD_AXIS_MAP
+        return event.event.code in GAMEPAD_AXIS_MAP
     return False
 
 
@@ -1601,15 +1601,15 @@ def scale_axis_value(event: AbsEvent) -> int | None:
         return None
 
     _, min_val, max_val = mapping
-    return scale_axis(event.value, event.info, min_val, max_val)
+    return scale_axis(event.event.value, event.event.info, min_val, max_val)
 
 
 def get_axis_mapping(event: AbsEvent) -> tuple[str, int, int] | None:
     """Get axis mapping information for gamepad or digitizer axes."""
     if is_gamepad_event(event):
-        return GAMEPAD_AXIS_MAP.get(event.code)
+        return GAMEPAD_AXIS_MAP.get(event.event.code)
     elif is_digitizer_event(event):
-        return DIGITIZER_AXIS_MAP.get(event.code)
+        return DIGITIZER_AXIS_MAP.get(event.event.code)
     return None
 
 

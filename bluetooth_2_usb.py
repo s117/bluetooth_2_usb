@@ -19,7 +19,7 @@ from src.bluetooth_2_usb.relay import (
 )
 
 logger = get_logger()
-VERSION = "0.9.1"
+VERSION = "0.10.0"
 VERSIONED_NAME = f"Bluetooth 2 USB v{VERSION}"
 
 shutdown_event = asyncio.Event()

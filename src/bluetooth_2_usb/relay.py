@@ -74,7 +74,6 @@ class GadgetManager:
         except Exception as ex:
             _logger.debug(f"usb_hid.disable() failed or was already disabled: {ex}")
 
-        _logger.debug(f"enter usb_hid.enable()")
         usb_hid.enable(
             [
                 Device.BOOT_MOUSE,
@@ -84,12 +83,12 @@ class GadgetManager:
                 # Device.DIGITIZER,
             ]
         )  # type: ignore
-        _logger.debug(f"exit usb_hid.enable() {usb_hid.devices}")
         enabled_devices = list(usb_hid.devices)  # type: ignore
 
         self._gadgets["keyboard"] = Keyboard(enabled_devices)
         self._gadgets["mouse"] = Mouse(enabled_devices)
         self._gadgets["consumer"] = ConsumerControl(enabled_devices)
+        _logger.debug(f"enabled_devices: {enabled_devices}")
         self._gadgets["gamepad"] = Gamepad(enabled_devices)
         # self._gadgets["digitizer"] = Digitizer(enabled_devices)
         self._enabled = True
@@ -567,29 +566,29 @@ def relay_event(event: InputEvent, gadget_manager: GadgetManager) -> None:
     if isinstance(event, RelEvent):
         mouse = gadget_manager.get_mouse()
         if mouse is None:
-            raise RuntimeError("Mouse gadget not initialized or manager not enabled.")
+            _logger.warning("Mouse gadget not initialized or manager not enabled.")
+            return
         move_mouse(event, mouse)
 
     elif isinstance(event, KeyEvent):
         output_device = get_output_device(event, gadget_manager)
         if output_device is None:
-            raise RuntimeError(
-                "No appropriate USB gadget found (manager not enabled?)."
-            )
+            _logger.warning("No appropriate USB gadget found (manager not enabled?).")
+            return
         send_key_event(event, output_device)
 
     elif isinstance(event, AbsEvent) and is_gamepad_event(event):
         device = gadget_manager.get_gamepad()
         if device is None:
-            raise RuntimeError("Gamepad gadget not initialized or manager not enabled.")
+            _logger.warning("Gamepad gadget not initialized or manager not enabled.")
+            return
         send_abs_event(event, device)
 
     elif isinstance(event, AbsEvent) and is_digitizer_event(event):
         device = gadget_manager.get_digitizer()
         if device is None:
-            raise RuntimeError(
-                "Digitizer gadget not initialized or manager not enabled."
-            )
+            _logger.warning("Digitizer gadget not initialized or manager not enabled.")
+            return
         send_abs_event(event, device)
 
 

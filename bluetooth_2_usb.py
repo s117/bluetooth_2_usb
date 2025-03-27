@@ -4,6 +4,7 @@ from logging import DEBUG
 from pathlib import Path
 import signal
 import sys
+import time
 
 import usb_hid
 
@@ -23,17 +24,30 @@ VERSION = "0.10.0"
 VERSIONED_NAME = f"Bluetooth 2 USB v{VERSION}"
 
 shutdown_event = asyncio.Event()
+last_signal_time = 0
+FORCE_EXIT_WINDOW = 3.0  # seconds
 
 
 def signal_handler(sig, frame):
     """
     Signal handler that sets the global shutdown_event.
+    Forces exit if two signals are received within FORCE_EXIT_WINDOW seconds.
 
     :param sig: Integer signal number
     :param frame: Unused stack frame object
     """
+    global last_signal_time
+    current_time = time.time()
     sig_name = signal.Signals(sig).name
+
+    if current_time - last_signal_time < FORCE_EXIT_WINDOW:
+        logger.warning(
+            f"Received second signal {sig_name} within {FORCE_EXIT_WINDOW}s. Forcing exit."
+        )
+        sys.exit(1)
+
     logger.debug(f"Received signal: {sig_name}. Requesting graceful shutdown.")
+    last_signal_time = current_time
     shutdown_event.set()
 
 

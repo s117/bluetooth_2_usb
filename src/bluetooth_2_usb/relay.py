@@ -74,21 +74,23 @@ class GadgetManager:
         except Exception as ex:
             _logger.debug(f"usb_hid.disable() failed or was already disabled: {ex}")
 
+        _logger.debug(f"enter usb_hid.enable()")
         usb_hid.enable(
             [
                 Device.BOOT_MOUSE,
                 Device.KEYBOARD,
                 Device.CONSUMER_CONTROL,
-                # Device.GAMEPAD,
+                Device.GAMEPAD,
                 # Device.DIGITIZER,
             ]
         )  # type: ignore
+        _logger.debug(f"exit usb_hid.enable() {usb_hid.devices}")
         enabled_devices = list(usb_hid.devices)  # type: ignore
 
         self._gadgets["keyboard"] = Keyboard(enabled_devices)
         self._gadgets["mouse"] = Mouse(enabled_devices)
         self._gadgets["consumer"] = ConsumerControl(enabled_devices)
-        # self._gadgets["gamepad"] = Gamepad(enabled_devices)
+        self._gadgets["gamepad"] = Gamepad(enabled_devices)
         # self._gadgets["digitizer"] = Digitizer(enabled_devices)
         self._enabled = True
 

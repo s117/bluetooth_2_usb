@@ -560,12 +560,12 @@ class DeviceRelay:
             return
 
         if isinstance(device, Gamepad):
-            mapping = GAMEPAD_AXIS_MAP.get(event.code)
+            mapping = GAMEPAD_AXIS_MAP.get(event.event.code)
             if mapping:
                 axis_name, _, _ = mapping
                 device.move_axes(**{axis_name: scaled_value})
         elif isinstance(device, Digitizer):
-            mapping = DIGITIZER_AXIS_MAP.get(event.code)
+            mapping = DIGITIZER_AXIS_MAP.get(event.event.code)
             if mapping:
                 axis_name, _, _ = mapping
                 device.update(**{axis_name: scaled_value})

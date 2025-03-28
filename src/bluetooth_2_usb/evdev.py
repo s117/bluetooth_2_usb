@@ -1594,14 +1594,14 @@ def _cached_dir(
     return dir(class_type)
 
 
-def scale_axis_value(event: AbsEvent) -> int | None:
+def scale_axis_value(event: AbsEvent, axis_info: AbsInfo) -> int | None:
     """Scale axis value according to its mapping."""
     mapping = get_axis_mapping(event)
     if mapping is None:
         return None
 
     _, min_val, max_val = mapping
-    return scale_axis(event.event.value, event.event.info, min_val, max_val)
+    return scale_axis(event.event.value, axis_info, min_val, max_val)
 
 
 def get_axis_mapping(event: AbsEvent) -> tuple[str, int, int] | None:

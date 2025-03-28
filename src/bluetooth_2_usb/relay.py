@@ -88,7 +88,6 @@ class GadgetManager:
         self._gadgets["keyboard"] = Keyboard(enabled_devices)
         self._gadgets["mouse"] = Mouse(enabled_devices)
         self._gadgets["consumer"] = ConsumerControl(enabled_devices)
-        _logger.debug(f"enabled_devices: {enabled_devices}")
         self._gadgets["gamepad"] = Gamepad(enabled_devices)
         # self._gadgets["digitizer"] = Digitizer(enabled_devices)
         self._enabled = True
@@ -469,7 +468,7 @@ class DeviceRelay:
         retry_delay = 0.1
         for attempt in range(1, max_tries + 1):
             try:
-                relay_event(event, self._gadget_manager)
+                self.relay_event(event)
                 return
             except BlockingIOError:
                 if attempt < max_tries:
@@ -489,6 +488,130 @@ class DeviceRelay:
             except Exception:
                 _logger.exception(f"Error processing {event}")
                 return
+
+    def relay_event(self, event: InputEvent) -> None:
+        """
+        Relay the given event to the appropriate USB HID device.
+
+        :param event: The evdev InputEvent
+        :raises BlockingIOError: If HID device write is blocked
+        :raises RuntimeError: If appropriate HID device is not available
+        """
+        if isinstance(event, RelEvent):
+            mouse = self._gadget_manager.get_mouse()
+            if mouse is None:
+                _logger.warning("Mouse gadget not initialized or manager not enabled.")
+                return
+            self._move_mouse(event, mouse)
+
+        elif isinstance(event, KeyEvent):
+            output_device = self._get_output_device(event)
+            if output_device is None:
+                _logger.warning(
+                    "No appropriate USB gadget found (manager not enabled?)."
+                )
+                return
+            self._send_key_event(event, output_device)
+
+        elif isinstance(event, AbsEvent) and is_gamepad_event(event):
+            device = self._gadget_manager.get_gamepad()
+            if device is None:
+                _logger.warning(
+                    "Gamepad gadget not initialized or manager not enabled."
+                )
+                return
+            self._send_abs_event(event, device)
+
+        elif isinstance(event, AbsEvent) and is_digitizer_event(event):
+            device = self._gadget_manager.get_digitizer()
+            if device is None:
+                _logger.warning(
+                    "Digitizer gadget not initialized or manager not enabled."
+                )
+                return
+            self._send_abs_event(event, device)
+
+    def _move_mouse(self, event: RelEvent, mouse: Mouse) -> None:
+        """
+        Relay relative mouse movement events to the USB HID Mouse gadget.
+
+        :param event: A RelEvent describing the movement
+        :param mouse: Mouse HID device
+        """
+        x, y, mwheel = get_mouse_movement(event)
+        mouse.move(x, y, mwheel)
+
+    def _send_abs_event(
+        self, event: AbsEvent, device: Union[Gamepad, Digitizer]
+    ) -> None:
+        """
+        Relay absolute axis events to gamepad or digitizer.
+
+        :param event: The AbsEvent to process
+        :param device: The HID device (Gamepad or Digitizer) to send the event to
+        """
+        abs_info = self._input_device.absinfo(event.event.code)
+        if abs_info is None:
+            _logger.warning(f"No AbsInfo available for axis {event.event.code}")
+            return
+
+        scaled_value = scale_axis_value(event, abs_info)
+        if scaled_value is None:
+            return
+
+        if isinstance(device, Gamepad):
+            mapping = GAMEPAD_AXIS_MAP.get(event.code)
+            if mapping:
+                axis_name, _, _ = mapping
+                device.move_axes(**{axis_name: scaled_value})
+        elif isinstance(device, Digitizer):
+            mapping = DIGITIZER_AXIS_MAP.get(event.code)
+            if mapping:
+                axis_name, _, _ = mapping
+                device.update(**{axis_name: scaled_value})
+
+    def _send_key_event(
+        self,
+        event: KeyEvent,
+        output_device: Union[ConsumerControl, Keyboard, Mouse, Gamepad, Digitizer],
+    ) -> None:
+        """
+        Relay a key event (press/release) to the appropriate HID gadget.
+
+        :param event: The KeyEvent to process
+        :param output_device: The HID device to send the event to
+        """
+        key_id, key_name = evdev_to_usb_hid(event)
+        if key_id is None or key_name is None:
+            return
+
+        if event.keystate == KeyEvent.key_down:
+            _logger.debug(f"Pressing {key_name} (0x{key_id:02X}) via {output_device}")
+            output_device.press(key_id)
+        elif event.keystate == KeyEvent.key_up:
+            _logger.debug(f"Releasing {key_name} (0x{key_id:02X}) via {output_device}")
+            output_device.release(key_id)
+
+    def _get_output_device(
+        self, event: KeyEvent
+    ) -> Union[ConsumerControl, Keyboard, Mouse, Gamepad, Digitizer, None]:
+        """
+        Determine which HID gadget to target for the given key event.
+
+        :param event: The KeyEvent to process
+        :return: An appropriate HID device object, or None if not found
+        """
+        if is_mouse_button(event):
+            return self._gadget_manager.get_mouse()
+        elif is_digitizer_button(event):
+            return self._gadget_manager.get_digitizer()
+        elif is_keyboard_key(event):
+            return self._gadget_manager.get_keyboard()
+        elif is_consumer_key(event):
+            return self._gadget_manager.get_consumer()
+        elif is_gamepad_button(event):
+            return self._gadget_manager.get_gamepad()
+        return None
 
 
 class DeviceIdentifier:
@@ -552,123 +675,6 @@ async def async_list_input_devices() -> list[InputDevice]:
     except Exception:
         _logger.exception("Unexpected error listing devices")
         return []
-
-
-def relay_event(event: InputEvent, gadget_manager: GadgetManager) -> None:
-    """
-    Relay the given event to the appropriate USB HID device.
-
-    :param event: The evdev InputEvent
-    :param gadget_manager: GadgetManager with references to HID devices
-    :raises BlockingIOError: If HID device write is blocked
-    :raises RuntimeError: If appropriate HID device is not available
-    """
-    if isinstance(event, RelEvent):
-        mouse = gadget_manager.get_mouse()
-        if mouse is None:
-            _logger.warning("Mouse gadget not initialized or manager not enabled.")
-            return
-        move_mouse(event, mouse)
-
-    elif isinstance(event, KeyEvent):
-        output_device = get_output_device(event, gadget_manager)
-        if output_device is None:
-            _logger.warning("No appropriate USB gadget found (manager not enabled?).")
-            return
-        send_key_event(event, output_device)
-
-    elif isinstance(event, AbsEvent) and is_gamepad_event(event):
-        device = gadget_manager.get_gamepad()
-        if device is None:
-            _logger.warning("Gamepad gadget not initialized or manager not enabled.")
-            return
-        send_abs_event(event, device)
-
-    elif isinstance(event, AbsEvent) and is_digitizer_event(event):
-        device = gadget_manager.get_digitizer()
-        if device is None:
-            _logger.warning("Digitizer gadget not initialized or manager not enabled.")
-            return
-        send_abs_event(event, device)
-
-
-def move_mouse(event: RelEvent, mouse: Mouse) -> None:
-    """
-    Relay relative mouse movement events to the USB HID Mouse gadget.
-
-    :param event: A RelEvent describing the movement
-    :param mouse: Mouse HID device
-    """
-    x, y, mwheel = get_mouse_movement(event)
-    mouse.move(x, y, mwheel)
-
-
-def send_abs_event(event: AbsEvent, device: Union[Gamepad, Digitizer]) -> None:
-    """
-    Relay absolute axis events to gamepad or digitizer.
-
-    :param event: The AbsEvent to process
-    :param device: The HID device (Gamepad or Digitizer) to send the event to
-    """
-    scaled_value = scale_axis_value(event)
-    if scaled_value is None:
-        return
-
-    if isinstance(device, Gamepad):
-        mapping = GAMEPAD_AXIS_MAP.get(event.code)
-        if mapping:
-            axis_name, _, _ = mapping
-            device.move_axes(**{axis_name: scaled_value})
-    elif isinstance(device, Digitizer):
-        mapping = DIGITIZER_AXIS_MAP.get(event.code)
-        if mapping:
-            axis_name, _, _ = mapping
-            device.update(**{axis_name: scaled_value})
-
-
-def send_key_event(
-    event: KeyEvent,
-    output_device: Union[ConsumerControl, Keyboard, Mouse, Gamepad, Digitizer],
-) -> None:
-    """
-    Relay a key event (press/release) to the appropriate HID gadget.
-
-    :param event: The KeyEvent to process
-    :param output_device: The HID device to send the event to
-    """
-    key_id, key_name = evdev_to_usb_hid(event)
-    if key_id is None or key_name is None:
-        return
-
-    if event.keystate == KeyEvent.key_down:
-        _logger.debug(f"Pressing {key_name} (0x{key_id:02X}) via {output_device}")
-        output_device.press(key_id)
-    elif event.keystate == KeyEvent.key_up:
-        _logger.debug(f"Releasing {key_name} (0x{key_id:02X}) via {output_device}")
-        output_device.release(key_id)
-
-
-def get_output_device(
-    event: KeyEvent, gadget_manager: GadgetManager
-) -> Union[ConsumerControl, Keyboard, Mouse, Gamepad, Digitizer, None]:
-    """
-    Determine which HID gadget to target for the given key event.
-
-    :param event: The KeyEvent to process
-    :param gadget_manager: GadgetManager for HID references
-    :return: An appropriate HID device object, or None if not found
-    """
-    if is_mouse_button(event):
-        return gadget_manager.get_mouse()
-    elif is_digitizer_button(event):
-        return gadget_manager.get_digitizer()
-    elif is_keyboard_key(event):
-        return gadget_manager.get_keyboard()
-    elif is_consumer_key(event):
-        return gadget_manager.get_consumer()
-    elif is_gamepad_button(event):
-        return gadget_manager.get_gamepad()
-    return None
 
 
 class UdcStateMonitor:

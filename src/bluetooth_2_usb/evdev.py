@@ -1419,15 +1419,15 @@ GAMEPAD_AXIS_MAP = {
     # Analog triggers
     ecodes.ABS_Z: ("lt", 0, 255),  # Left Trigger Analog
     ecodes.ABS_RZ: ("rt", 0, 255),  # Right Trigger Analog
-    # D-pad as HAT switch
-    ecodes.ABS_HAT0X: ("hat_x", -1, 1),  # D-pad X axis
-    ecodes.ABS_HAT0Y: ("hat_y", -1, 1),  # D-pad Y axis
     # Additional axes
     ecodes.ABS_THROTTLE: ("throttle", 0, 255),  # Throttle axis
     ecodes.ABS_RUDDER: ("rudder", 0, 255),  # Rudder control
     ecodes.ABS_WHEEL: ("wheel", -32768, 32767),  # Steering wheel
     ecodes.ABS_GAS: ("gas", 0, 255),  # Gas pedal
     ecodes.ABS_BRAKE: ("brake", 0, 255),  # Brake pedal
+    # D-pad as HAT switch
+    ecodes.ABS_HAT0X: ("hat0_x", -1, 1),  # D-pad X axis
+    ecodes.ABS_HAT0Y: ("hat0_y", -1, 1),  # D-pad Y axis
     # Additional HAT switches
     ecodes.ABS_HAT1X: ("hat1_x", -1, 1),  # Second HAT X
     ecodes.ABS_HAT1Y: ("hat1_y", -1, 1),  # Second HAT Y

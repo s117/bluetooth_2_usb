@@ -1398,6 +1398,13 @@ GAMEPAD_MAP = {
     ecodes.BTN_BASE5: GamepadButton.BASE5,
     ecodes.BTN_BASE6: GamepadButton.BASE6,
     ecodes.BTN_DEAD: GamepadButton.DEAD,
+    # Additional mappings for completeness
+    ecodes.BTN_TRIGGER: GamepadButton.L1,  # Map to L1 as alternative
+    ecodes.BTN_THUMB: GamepadButton.L3,  # Map to L3 as alternative
+    ecodes.BTN_THUMB2: GamepadButton.R3,  # Map to R3 as alternative
+    ecodes.BTN_TOP: GamepadButton.L1,  # Map to L1 as alternative
+    ecodes.BTN_TOP2: GamepadButton.R1,  # Map to R1 as alternative
+    ecodes.BTN_PINKIE: GamepadButton.SELECT,  # Map to SELECT as alternative
 }
 _GAMEPAD_BUTTONS = set(GAMEPAD_MAP.keys())
 

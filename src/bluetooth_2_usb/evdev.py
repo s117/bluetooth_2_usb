@@ -1052,7 +1052,7 @@ class GamepadButton:
     R1 = 0x20  # Right Bumper
     SELECT = 0x40
     START = 0x80
-    GUIDE = 0x0100
+    MODE = 0x0100
     L3 = 0x0200  # Left Stick Press
     R3 = 0x0400  # Right Stick Press
     L2 = 0x0800  # Left Trigger Digital

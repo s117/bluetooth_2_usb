@@ -24,6 +24,7 @@ from usb_hid import Device
 
 
 from .evdev import (
+    ecodes,
     evdev_to_usb_hid,
     find_key_name,
     get_mouse_movement,
@@ -423,8 +424,8 @@ class DeviceRelay:
         async for input_event in self._input_device.async_read_loop():
             event = categorize(input_event)
 
-            if any(
-                isinstance(event, ev_type) for ev_type in [KeyEvent, RelEvent, AbsEvent]
+            if any(isinstance(event, ev_type) for ev_type in [KeyEvent, RelEvent]) or (
+                isinstance(event, AbsEvent) and not event.event.code == ecodes.ABS_Z
             ):
                 _logger.debug(
                     f"Received {event} from {self._input_device.name} ({self._input_device.path})"

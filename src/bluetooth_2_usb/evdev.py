@@ -1384,7 +1384,7 @@ GAMEPAD_MAP = {
     ecodes.BTN_TR: GamepadButton.R1,
     ecodes.BTN_SELECT: GamepadButton.SELECT,
     ecodes.BTN_START: GamepadButton.START,
-    ecodes.BTN_MODE: GamepadButton.GUIDE,
+    ecodes.BTN_MODE: GamepadButton.MODE,
     ecodes.BTN_THUMBL: GamepadButton.L3,
     ecodes.BTN_THUMBR: GamepadButton.R3,
     ecodes.BTN_TL2: GamepadButton.L2,

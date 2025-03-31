@@ -562,16 +562,16 @@ class DeviceRelay:
             mapping = GAMEPAD_AXIS_MAP.get(event.event.code)
             if mapping:
                 axis_name, _, _ = mapping
-                if "hat" in axis_name:
-                    hat_id, coord = axis_name.split("_")
-                    device.set_hat(hat_id=hat_id, **{coord: scaled_value})
+                if axis_name.startswith("hat_"):
+                    hat_id, coord = axis_name.split("_", 1)
+                    device.set_hat(hat_id=int(hat_id), **{coord: scaled_value})  # type: ignore
                 else:
-                    device.move_axes(**{axis_name: scaled_value})
+                    device.move_axes(**{axis_name: scaled_value})  # type: ignore
         elif isinstance(device, Digitizer):
             mapping = DIGITIZER_AXIS_MAP.get(event.event.code)
             if mapping:
                 axis_name, _, _ = mapping
-                device.update(**{axis_name: scaled_value})
+                device.update(**{axis_name: scaled_value})  # type: ignore
 
     def _send_key_event(
         self,

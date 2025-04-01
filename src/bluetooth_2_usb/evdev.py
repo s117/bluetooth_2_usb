@@ -1560,10 +1560,10 @@ def is_digitizer_button(event: KeyEvent) -> bool:
 
 def is_gamepad_event(event: Union[KeyEvent, AbsEvent]) -> bool:
     """Check if event is from a gamepad device."""
-    # if isinstance(event, KeyEvent):
-    #     return is_gamepad_button(event)
-    # elif isinstance(event, AbsEvent):
-    #     return event.event.code in GAMEPAD_AXIS_MAP
+    if isinstance(event, KeyEvent):
+        return is_gamepad_button(event)
+    elif isinstance(event, AbsEvent):
+        return event.event.code in GAMEPAD_AXIS_MAP
     return False
 
 

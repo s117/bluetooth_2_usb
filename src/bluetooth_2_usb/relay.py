@@ -454,27 +454,10 @@ class DeviceRelay:
             if not active:
                 continue
 
-            await self._process_event_with_retry(event)
-
-    async def _process_event_with_retry(self, event: InputEvent) -> None:
-        """
-        Attempt to relay the given event to the appropriate HID gadget.
-        Retry on BlockingIOError up to 2 times.
-
-        :param event: The InputEvent to process
-        """
-        max_tries = 3
-        retry_delay = 0.1
-        for attempt in range(1, max_tries + 1):
             try:
-                self.relay_event(event)
-                return
+                await self.relay_event(event)
             except BlockingIOError:
-                if attempt < max_tries:
-                    _logger.debug(f"HID write blocked ({attempt}/{max_tries})")
-                    await asyncio.sleep(retry_delay)
-                else:
-                    _logger.warning(f"HID write blocked ({attempt}/{max_tries})")
+                _logger.warning("HID write blocked")
             except BrokenPipeError:
                 _logger.warning(
                     "BrokenPipeError: USB cable likely disconnected or power-only. "
@@ -483,10 +466,8 @@ class DeviceRelay:
                 )
                 if self._relaying_active:
                     self._relaying_active.clear()
-                return
             except Exception:
                 _logger.exception(f"Error processing {event}")
-                return
 
     def relay_event(self, event: InputEvent) -> None:
         """

@@ -80,7 +80,7 @@ class GadgetManager:
                 Device.BOOT_MOUSE,
                 Device.KEYBOARD,
                 Device.CONSUMER_CONTROL,
-                # Device.GAMEPAD,
+                Device.GAMEPAD,
                 Device.DIGITIZER,
             ]
         )  # type: ignore
@@ -89,7 +89,7 @@ class GadgetManager:
         self._gadgets["keyboard"] = Keyboard(enabled_devices)
         self._gadgets["mouse"] = Mouse(enabled_devices)
         self._gadgets["consumer"] = ConsumerControl(enabled_devices)
-        # self._gadgets["gamepad"] = Gamepad(enabled_devices)
+        self._gadgets["gamepad"] = Gamepad(enabled_devices)
         self._gadgets["digitizer"] = Digitizer(enabled_devices)
         self._enabled = True
 

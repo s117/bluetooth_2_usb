@@ -81,7 +81,7 @@ class GadgetManager:
                 Device.KEYBOARD,
                 Device.CONSUMER_CONTROL,
                 Device.GAMEPAD,
-                # Device.DIGITIZER,
+                Device.DIGITIZER,
             ]
         )  # type: ignore
         enabled_devices = list(usb_hid.devices)  # type: ignore
@@ -90,7 +90,7 @@ class GadgetManager:
         self._gadgets["mouse"] = Mouse(enabled_devices)
         self._gadgets["consumer"] = ConsumerControl(enabled_devices)
         self._gadgets["gamepad"] = Gamepad(enabled_devices)
-        # self._gadgets["digitizer"] = Digitizer(enabled_devices)
+        self._gadgets["digitizer"] = Digitizer(enabled_devices)
         self._enabled = True
 
         _logger.debug(f"USB HID gadgets re-initialized: {enabled_devices}")

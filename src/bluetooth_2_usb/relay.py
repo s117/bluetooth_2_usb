@@ -455,7 +455,7 @@ class DeviceRelay:
                 continue
 
             try:
-                await self.relay_event(event)
+                self.relay_event(event)
             except BlockingIOError:
                 _logger.warning("HID write blocked")
             except BrokenPipeError:

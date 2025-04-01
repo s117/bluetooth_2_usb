@@ -1460,6 +1460,8 @@ _DIGITIZER_BUTTONS = set(DIGITIZER_MAP.keys())
 
 # Digitizer axis mappings
 DIGITIZER_AXIS_MAP = {
+    ecodes.ABS_X: ("x", 0, 32767),  # X position
+    ecodes.ABS_Y: ("y", 0, 32767),  # Y position
     ecodes.ABS_PRESSURE: ("pressure", 0, 8191),  # Pressure sensitivity
     ecodes.ABS_DISTANCE: ("distance", 0, 255),  # Hover distance
     ecodes.ABS_TILT_X: ("tilt_x", -127, 127),  # X tilt

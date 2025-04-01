@@ -543,7 +543,7 @@ class DeviceRelay:
             mapping = GAMEPAD_AXIS_MAP.get(event.event.code)
             if mapping:
                 axis_name, _, _ = mapping
-                if axis_name.startswith("hat_"):
+                if axis_name.startswith("hat"):
                     hat_id, coord = axis_name.split("_", 1)
                     device.set_hat(hat_id=int(hat_id), **{coord: scaled_value})  # type: ignore
                 else:

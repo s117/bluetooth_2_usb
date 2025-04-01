@@ -545,7 +545,7 @@ class DeviceRelay:
                 axis_name, _, _ = mapping
                 if axis_name.startswith("hat"):
                     hat_id, coord = axis_name.split("_", 1)
-                    device.set_hat(hat_id=int(hat_id), **{coord: scaled_value})  # type: ignore
+                    device.set_hat(hat_id=hat_id, **{coord: scaled_value})  # type: ignore
                 else:
                     device.move_axes(**{axis_name: scaled_value})  # type: ignore
         elif isinstance(device, Digitizer):

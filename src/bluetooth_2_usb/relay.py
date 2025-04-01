@@ -425,7 +425,19 @@ class DeviceRelay:
             event = categorize(input_event)
 
             if any(
-                isinstance(event, ev_type) for ev_type in [KeyEvent, RelEvent, AbsEvent]
+                isinstance(event, ev_type)
+                for ev_type in [KeyEvent, RelEvent]
+                or (
+                    isinstance(event, AbsEvent)
+                    and event.event.code
+                    not in (
+                        ecodes.ABS_X,
+                        ecodes.ABS_Y,
+                        ecodes.ABS_Z,
+                        ecodes.ABS_RX,
+                        ecodes.ABS_RY,
+                    )
+                )
             ):
                 _logger.debug(
                     f"Received {event} from {self._input_device.name} ({self._input_device.path})"

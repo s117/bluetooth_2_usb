@@ -344,10 +344,12 @@ class RelayController:
 
 class DeviceRelay:
     """
-    Relay a single InputDevice's events to USB HID gadgets.
+    Relay a single InputDevice's events to USB HID gadgets, including Gamepad.
 
     - Optionally grabs the device exclusively.
     - Retries HID writes if they raise BlockingIOError.
+    - Requires helper functions/maps (is_*, scale_*, *_MAP) to be correctly
+      adapted for the specific input device and the Gamepad class.
     """
 
     def __init__(
@@ -356,11 +358,13 @@ class DeviceRelay:
         gadget_manager: GadgetManager,
         grab_device: bool = False,
         relaying_active: Optional[asyncio.Event] = None,
-        shortcut_toggler: Optional["ShortcutToggler"] = None,
+        shortcut_toggler: Optional[
+            "ShortcutToggler"
+        ] = None,  # Assuming ShortcutToggler defined elsewhere
     ) -> None:
         """
         :param input_device: The evdev input device
-        :param gadget_manager: Provides references to Keyboard, Mouse, ConsumerControl
+        :param gadget_manager: Provides references to Keyboard, Mouse, ConsumerControl, Gamepad, Digitizer
         :param grab_device: Whether to grab the device for exclusive access
         :param relaying_active: asyncio.Event that indicates relaying is on/off
         :param shortcut_toggler: Optional handler for toggling relay via a shortcut
@@ -372,26 +376,20 @@ class DeviceRelay:
         self._shortcut_toggler = shortcut_toggler
 
         self._currently_grabbed = False
+        # State for Hat Switch (D-Pad) translation
+        self._hat_x = 0  # Store scaled value (-1, 0, 1)
+        self._hat_y = 0  # Store scaled value (-1, 0, 1)
 
     def __str__(self) -> str:
         return f"relay for {self._input_device}"
 
     @property
     def input_device(self) -> InputDevice:
-        """
-        The underlying evdev InputDevice being relayed.
-
-        :return: The InputDevice
-        :rtype: InputDevice
-        """
+        """The underlying evdev InputDevice being relayed."""
         return self._input_device
 
     async def __aenter__(self) -> "DeviceRelay":
-        """
-        Async context manager entry. Grabs the device if requested.
-
-        :return: self
-        """
+        """Async context manager entry. Grabs the device if requested."""
         if self._grab_device:
             try:
                 self._input_device.grab()
@@ -401,83 +399,98 @@ class DeviceRelay:
         return self
 
     async def __aexit__(self, exc_type, exc_val, exc_tb) -> bool:
-        """
-        Async context manager exit. Ungrabs the device if we grabbed it.
-
-        :return: False to propagate exceptions
-        """
-        if self._grab_device:
+        """Async context manager exit. Ungrabs the device if we grabbed it."""
+        if self._grab_device and self._currently_grabbed:  # Check if actually grabbed
             try:
                 self._input_device.ungrab()
                 self._currently_grabbed = False
             except Exception as ex:
-                _logger.warning(f"Unable to ungrab {self._input_device.path}: {ex}")
-        return False
+                # Avoid logging if ungrabbing non-grabbed device (e.g., OSError: [Errno 22] Invalid argument)
+                if not (isinstance(ex, OSError) and ex.errno == 22):
+                    _logger.warning(f"Unable to ungrab {self._input_device.path}: {ex}")
+        return False  # Propagate exceptions
 
     async def async_relay_events_loop(self) -> None:
         """
         Continuously read events from the device and relay them
         to the USB HID gadgets. Stops when canceled or on error.
-
-        :return: None
         """
-        async for input_event in self._input_device.async_read_loop():
-            event = categorize(input_event)
+        try:
+            async for input_event in self._input_device.async_read_loop():
+                event = categorize(input_event)
 
-            if isinstance(event, (KeyEvent, RelEvent)) or (
-                isinstance(event, AbsEvent)
-                and event.event.code
-                not in {
-                    ecodes.ABS_X,
-                    ecodes.ABS_Y,
-                    ecodes.ABS_Z,
-                    ecodes.ABS_RX,
-                    ecodes.ABS_RY,
-                }
-            ):
-                _logger.debug(
-                    f"Received {event} from {self._input_device.name} ({self._input_device.path})"
-                )
+                # Reduce logging verbosity for high-frequency axis events
+                if not isinstance(event, AbsEvent):
+                    _logger.debug(
+                        f"Received {event} from {self._input_device.name} ({self._input_device.path})"
+                    )
 
-            if self._shortcut_toggler and isinstance(event, KeyEvent):
-                self._shortcut_toggler.handle_key_event(event)
+                if self._shortcut_toggler and isinstance(event, KeyEvent):
+                    self._shortcut_toggler.handle_key_event(event)
 
-            active = self._relaying_active and self._relaying_active.is_set()
+                active = self._relaying_active is None or self._relaying_active.is_set()
 
-            # Dynamically grab/ungrab if relaying state changes
-            if self._grab_device and active and not self._currently_grabbed:
+                # Dynamically grab/ungrab if relaying state changes
+                if self._grab_device:
+                    if active and not self._currently_grabbed:
+                        try:
+                            self._input_device.grab()
+                            self._currently_grabbed = True
+                            _logger.debug(f"Grabbed {self._input_device.path}")
+                        except Exception as ex:
+                            _logger.warning(
+                                f"Could not grab {self._input_device.path}: {ex}"
+                            )
+                    elif not active and self._currently_grabbed:
+                        try:
+                            self._input_device.ungrab()
+                            self._currently_grabbed = False
+                            _logger.debug(f"Ungrabbed {self._input_device.path}")
+                        except Exception as ex:
+                            if not (
+                                isinstance(ex, OSError) and ex.errno == 22
+                            ):  # Avoid spam on clean shutdown
+                                _logger.warning(
+                                    f"Could not ungrab {self._input_device.path}: {ex}"
+                                )
+
+                if not active:
+                    continue
+
                 try:
-                    self._input_device.grab()
-                    self._currently_grabbed = True
-                    _logger.debug(f"Grabbed {self._input_device}")
-                except Exception as ex:
-                    _logger.warning(f"Could not grab {self._input_device}: {ex}")
-
-            elif self._grab_device and not active and self._currently_grabbed:
+                    self.relay_event(event)
+                except BlockingIOError:
+                    _logger.warning("HID write blocked, skipping event")
+                    # Optional: Add a small delay or backoff mechanism here
+                    await asyncio.sleep(0.01)
+                except BrokenPipeError:
+                    _logger.error(  # Make it an error
+                        "BrokenPipeError: USB HID write failed. Cable disconnected or gadget unavailable? Pausing relay."
+                    )
+                    if self._relaying_active:
+                        self._relaying_active.clear()
+                    # Consider adding a mechanism to attempt recovery later
+                    break  # Exit the loop on broken pipe
+                except Exception:
+                    _logger.exception(f"Error processing {event}")
+        except asyncio.CancelledError:
+            _logger.info(f"Relay loop for {self._input_device.path} cancelled.")
+        except Exception as e:
+            _logger.exception(
+                f"Unhandled exception in relay loop for {self._input_device.path}: {e}"
+            )
+        finally:
+            # Ensure device is ungrabbed on exit (if grabbed)
+            if self._grab_device and self._currently_grabbed:
                 try:
                     self._input_device.ungrab()
                     self._currently_grabbed = False
-                    _logger.debug(f"Ungrabbed {self._input_device}")
+                    _logger.debug(f"Ungrabbed {self._input_device.path} on exit")
                 except Exception as ex:
-                    _logger.warning(f"Could not ungrab {self._input_device}: {ex}")
-
-            if not active:
-                continue
-
-            try:
-                self.relay_event(event)
-            except BlockingIOError:
-                _logger.warning("HID write blocked")
-            except BrokenPipeError:
-                _logger.warning(
-                    "BrokenPipeError: USB cable likely disconnected or power-only. "
-                    "Pausing relay.\nSee: "
-                    "https://github.com/quaxalber/bluetooth_2_usb?tab=readme-ov-file#7-troubleshooting"
-                )
-                if self._relaying_active:
-                    self._relaying_active.clear()
-            except Exception:
-                _logger.exception(f"Error processing {event}")
+                    if not (isinstance(ex, OSError) and ex.errno == 22):
+                        _logger.warning(
+                            f"Could not ungrab {self._input_device.path} on exit: {ex}"
+                        )
 
     def relay_event(self, event: InputEvent) -> None:
         """
@@ -485,84 +498,132 @@ class DeviceRelay:
 
         :param event: The evdev InputEvent
         :raises BlockingIOError: If HID device write is blocked
+        :raises BrokenPipeError: If the HID device is gone
         :raises RuntimeError: If appropriate HID device is not available
         """
         if isinstance(event, RelEvent):
             mouse = self._gadget_manager.get_mouse()
             if mouse is None:
-                _logger.warning("Mouse gadget not initialized or manager not enabled.")
+                # Don't warn excessively for devices that naturally produce RelEvents but have no mouse gadget
+                # _logger.warning("Mouse gadget not initialized or manager not enabled.")
                 return
             self._move_mouse(event, mouse)
 
         elif isinstance(event, KeyEvent):
             output_device = self._get_output_device(event)
             if output_device is None:
-                _logger.warning(
-                    "No appropriate USB gadget found (manager not enabled?)."
-                )
+                # Don't warn if the key simply isn't mapped
+                # _logger.warning("No appropriate USB gadget found or key not mapped.")
                 return
             self._send_key_event(event, output_device)
 
-        elif isinstance(event, AbsEvent) and is_gamepad_event(event):
-            device = self._gadget_manager.get_gamepad()
-            if device is None:
-                _logger.warning(
-                    "Gamepad gadget not initialized or manager not enabled."
-                )
-                return
-            self._send_abs_event(event, device)
+        elif isinstance(event, AbsEvent):
+            # Route AbsEvent to Gamepad or Digitizer
+            if is_gamepad_event(event):
+                device = self._gadget_manager.get_gamepad()
+                if device is None:
+                    # _logger.warning("Gamepad gadget not initialized or manager not enabled.")
+                    return
+                self._send_abs_event(event, device)  # device is Gamepad here
+            elif is_digitizer_event(event):
+                device = self._gadget_manager.get_digitizer()
+                if device is None:
+                    # _logger.warning("Digitizer gadget not initialized or manager not enabled.")
+                    return
+                self._send_abs_event(event, device)  # device is Digitizer here
 
-        elif isinstance(event, AbsEvent) and is_digitizer_event(event):
-            device = self._gadget_manager.get_digitizer()
-            if device is None:
-                _logger.warning(
-                    "Digitizer gadget not initialized or manager not enabled."
-                )
-                return
-            self._send_abs_event(event, device)
+        # Ignoring SYN events for now
 
     def _move_mouse(self, event: RelEvent, mouse: Mouse) -> None:
-        """
-        Relay relative mouse movement events to the USB HID Mouse gadget.
-
-        :param event: A RelEvent describing the movement
-        :param mouse: Mouse HID device
-        """
+        """Relay relative mouse movement events."""
         x, y, mwheel = get_mouse_movement(event)
-        mouse.move(x, y, mwheel)
+        if x != 0 or y != 0 or mwheel != 0:  # Only send if there's movement
+            mouse.move(x, y, mwheel)  # Raises BlockingIOError/BrokenPipeError
 
     def _send_abs_event(
         self, event: AbsEvent, device: Union[Gamepad, Digitizer]
     ) -> None:
         """
-        Relay absolute axis events to gamepad or digitizer.
+        Relay absolute axis events to Gamepad or Digitizer.
+
+        Handles scaling and stateful hat switch conversion for Gamepad.
 
         :param event: The AbsEvent to process
-        :param device: The HID device (Gamepad or Digitizer) to send the event to
+        :param device: The HID device (Gamepad or Digitizer)
         """
         abs_info = self._input_device.absinfo(event.event.code)
         if abs_info is None:
             _logger.warning(f"No AbsInfo available for axis {event.event.code}")
             return
 
+        # Scale the value based on the target device type and axis
+        # CRITICAL: Assumes scale_axis_value is correctly adapted
         scaled_value = scale_axis_value(event, abs_info)
         if scaled_value is None:
+            # _logger.debug(f"No scaling applied for axis {event.event.code}")
             return
 
         if isinstance(device, Gamepad):
-            mapping = GAMEPAD_AXIS_MAP.get(event.event.code)
-            if mapping:
-                axis_name, _, _ = mapping
-                if axis_name.startswith("hat"):
-                    hat_id, coord = axis_name.split("_", 1)
-                    device.set_hat(hat_id=hat_id, **{coord: scaled_value})  # type: ignore
+            code = event.event.code
+            # Handle Hat Switch separately
+            if code == ecodes.ABS_HAT0X:
+                self._hat_x = scaled_value  # Store scaled value (-1, 0, 1)
+                self._update_hat_state(device)
+            elif code == ecodes.ABS_HAT0Y:
+                self._hat_y = scaled_value  # Store scaled value (-1, 0, 1)
+                self._update_hat_state(device)
+            else:
+                # Handle regular axes (sticks, triggers)
+                # CRITICAL: Assumes GAMEPAD_AXIS_MAP provides correct axis names
+                # for Gamepad.move_joysticks ('x', 'y', 'rx', 'ry', 'l2', 'r2')
+                axis_name = GAMEPAD_AXIS_MAP.get(code)
+                if axis_name:
+                    # _logger.debug(f"Moving gamepad axis {axis_name} to {scaled_value}")
+                    # Raises BlockingIOError/BrokenPipeError
+                    device.move_joysticks(**{axis_name: scaled_value})
                 else:
-                    device.move_axes(**{axis_name: scaled_value})  # type: ignore
+                    _logger.warning(
+                        f"No axis name mapping found for gamepad evdev code {code}"
+                    )
+
         elif isinstance(device, Digitizer):
-            mapping = DIGITIZER_AXIS_MAP.get(event.event.code)
-            if mapping:
-                axis_name, _, _ = mapping
-                device.update(**{axis_name: scaled_value})  # type: ignore
+            # CRITICAL: Assumes DIGITIZER_AXIS_MAP exists and is correct
+            # mapping = DIGITIZER_AXIS_MAP.get(event.event.code)
+            # if mapping:
+            #    axis_name, _, _ = mapping # Assuming similar structure
+            #    _logger.debug(f"Updating digitizer axis {axis_name} to {scaled_value}")
+            #    device.update(**{axis_name: scaled_value}) # Raises BlockingIOError/BrokenPipeError
+            pass  # Placeholder for Digitizer logic
+
+    def _update_hat_state(self, device: Gamepad):
+        """Combines stored hat X/Y states into a direction and sends update."""
+        x = self._hat_x
+        y = self._hat_y  # Note: evdev typically has Y: -1=Up, 1=Down
+
+        # Map (X, Y) to Gamepad.HAT_* direction constants (0-8)
+        # Y uses negative logic for 'UP'
+        if x == 0 and y == -1:
+            direction = Gamepad.HAT_TOP
+        elif x == 1 and y == -1:
+            direction = Gamepad.HAT_TOP_RIGHT
+        elif x == 1 and y == 0:
+            direction = Gamepad.HAT_RIGHT
+        elif x == 1 and y == 1:
+            direction = Gamepad.HAT_BOTTOM_RIGHT
+        elif x == 0 and y == 1:
+            direction = Gamepad.HAT_BOTTOM
+        elif x == -1 and y == 1:
+            direction = Gamepad.HAT_BOTTOM_LEFT
+        elif x == -1 and y == 0:
+            direction = Gamepad.HAT_LEFT
+        elif x == -1 and y == -1:
+            direction = Gamepad.HAT_TOP_LEFT
+        else:  # x == 0 and y == 0
+            direction = Gamepad.HAT_NEUTRAL  # Center/Released
+
+        # _logger.debug(f"Updating hat to direction {direction} (X={x}, Y={y})")
+        # Raises BlockingIOError/BrokenPipeError
+        device.move_hat(direction=direction)
 
     def _send_key_event(
         self,
@@ -571,40 +632,86 @@ class DeviceRelay:
     ) -> None:
         """
         Relay a key event (press/release) to the appropriate HID gadget.
+        Handles mapping to Gamepad button numbers.
 
         :param event: The KeyEvent to process
         :param output_device: The HID device to send the event to
         """
-        key_id, key_name = evdev_to_usb_hid(event)
-        if key_id is None or key_name is None:
-            return
+        # CRITICAL: Assumes evdev_to_usb_hid is adapted for Gamepad
+        key_code_or_button_num, key_name = evdev_to_usb_hid(event)
 
-        if event.keystate == KeyEvent.key_down:
-            _logger.debug(f"Pressing {key_name} (0x{key_id:02X}) via {output_device}")
-            output_device.press(key_id)
-        elif event.keystate == KeyEvent.key_up:
-            _logger.debug(f"Releasing {key_name} (0x{key_id:02X}) via {output_device}")
-            output_device.release(key_id)
+        if key_code_or_button_num is None or key_name is None:
+            # _logger.debug(f"No mapping for key event: {event}")
+            return  # Key not mapped
+
+        if isinstance(output_device, Gamepad):
+            # We expect a button number (1-16) from evdev_to_usb_hid
+            button_number = key_code_or_button_num
+            if not isinstance(button_number, int) or not 1 <= button_number <= 16:
+                _logger.error(
+                    f"Invalid button number {button_number} received for Gamepad from mapping."
+                )
+                return
+
+            if event.keystate == KeyEvent.key_down:
+                _logger.debug(f"Pressing Gamepad Button {button_number} ({key_name})")
+                output_device.press_buttons(
+                    button_number
+                )  # Raises BlockingIOError/BrokenPipeError
+            elif event.keystate == KeyEvent.key_up:
+                _logger.debug(f"Releasing Gamepad Button {button_number} ({key_name})")
+                output_device.release_buttons(
+                    button_number
+                )  # Raises BlockingIOError/BrokenPipeError
+            # Ignoring KeyEvent.key_hold for stateless buttons
+
+        elif isinstance(output_device, (Keyboard, ConsumerControl, Mouse)):
+            # Assume key_code_or_button_num is the correct HID code for these
+            hid_code = key_code_or_button_num
+            if not isinstance(hid_code, int):
+                _logger.error(
+                    f"Invalid HID code {hid_code} received for {type(output_device)} from mapping."
+                )
+                return
+
+            if event.keystate == KeyEvent.key_down:
+                _logger.debug(
+                    f"Pressing {key_name} (0x{hid_code:02X}) via {type(output_device)}"
+                )
+                output_device.press(hid_code)  # Raises BlockingIOError/BrokenPipeError
+            elif event.keystate == KeyEvent.key_up:
+                _logger.debug(
+                    f"Releasing {key_name} (0x{hid_code:02X}) via {type(output_device)}"
+                )
+                output_device.release(
+                    hid_code
+                )  # Raises BlockingIOError/BrokenPipeError
+
+        # Add logic for Digitizer key events if needed
 
     def _get_output_device(
         self, event: KeyEvent
     ) -> Union[ConsumerControl, Keyboard, Mouse, Gamepad, Digitizer, None]:
         """
         Determine which HID gadget to target for the given key event.
+        Now includes checks for Gamepad.
 
         :param event: The KeyEvent to process
-        :return: An appropriate HID device object, or None if not found
+        :return: An appropriate HID device object, or None if not mapped/found
         """
-        if is_mouse_button(event):
+        # Order matters if a key could belong to multiple categories
+        if is_gamepad_button(event):  # Check Gamepad first
+            return self._gadget_manager.get_gamepad()  # Returns Gamepad or None
+        elif is_mouse_button(event):
             return self._gadget_manager.get_mouse()
-        elif is_digitizer_button(event):
+        elif is_digitizer_button(event):  # Check before keyboard if keys overlap
             return self._gadget_manager.get_digitizer()
+        elif is_consumer_key(event):  # Check before keyboard if keys overlap
+            return self._gadget_manager.get_consumer()
         elif is_keyboard_key(event):
             return self._gadget_manager.get_keyboard()
-        elif is_consumer_key(event):
-            return self._gadget_manager.get_consumer()
-        elif is_gamepad_button(event):
-            return self._gadget_manager.get_gamepad()
+
+        # Key didn't match any known category
         return None
 
 

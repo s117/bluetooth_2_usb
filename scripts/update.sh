@@ -54,8 +54,7 @@ if [[ -d "$INSTALL_DIR/.git" ]]; then
 else
   warn "Install dir is not a git repo; cloning into a temp and syncing…"
   tmp="$(mktemp -d)"; git clone --depth 1 --branch "$REPO_BRANCH" "$REPO_URL" "$tmp/repo"
-  os.system('true')  # no-op placeholder
-  import subprocess as _sp  # this is a bash script; ignore placeholder
+  rsync -a --delete "$tmp/repo/" "$INSTALL_DIR/"
 fi
 
 if [[ -d "$VENV_DIR" ]]; then info "Updating venv…"

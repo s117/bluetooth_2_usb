@@ -9,7 +9,7 @@ ok(){ printf "${GREEN}✓ %s${NC}\n" "$*"; }
 warn(){ printf "${YELLOW}⚠ %s${NC}\n" "$*"; }
 fail(){ printf "${RED}✖ %s${NC}\n" "$*"; exit 1; }
 
-REPO_URL="https://github.com/saepi/bluetooth_2_usb.git"
+REPO_URL="https://github.com/quaxalber/bluetooth_2_usb.git"
 REPO_BRANCH="main"
 INSTALL_DIR="/opt/bluetooth_2_usb"
 LOG_DIR="/var/log/bluetooth_2_usb"
@@ -29,7 +29,7 @@ while [[ $# -gt 0 ]]; do
     -h|--help)
       cat <<'EOF'
 Usage: sudo ./install.sh [options]
-  --repo <url>     Git repository (default: https://github.com/saepi/bluetooth_2_usb.git)
+  --repo <url>     Git repository (default: https://github.com/quaxalber/bluetooth_2_usb.git)
   --branch <name>  Branch/tag (default: main)
   --dir </path>    Install dir (default: /opt/bluetooth_2_usb)
   --no-reboot      Do not prompt to reboot

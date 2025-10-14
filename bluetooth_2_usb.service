@@ -1,12 +1,21 @@
+# /etc/systemd/system/bluetooth_2_usb.service
 [Unit]
-Description=Bluetooth to USB HID relay
-After=multi-user.target
+Description=Bluetooth to USB (HID Relay)
+After=network-online.target
+Wants=network-online.target
 
 [Service]
+Type=simple
 User=root
-ExecStart=/usr/bin/bluetooth_2_usb --auto_discover --grab_devices --interrupt_shortcut CTRL+SHIFT+F12
-Environment=PYTHONUNBUFFERED=1
+Group=root
+WorkingDirectory=/opt/bluetooth_2_usb
+ExecStart=/opt/bluetooth_2_usb/venv/bin/python -m bluetooth_2_usb --auto_discover --grab_devices --interrupt_shortcut CTRL+SHIFT+F12
 Restart=on-failure
+RestartSec=2s
+NoNewPrivileges=true
+ProtectSystem=full
+ProtectHome=true
+PrivateTmp=true
 
 [Install]
 WantedBy=multi-user.target

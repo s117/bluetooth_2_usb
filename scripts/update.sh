@@ -13,7 +13,7 @@ INSTALL_DIR="/opt/bluetooth_2_usb"
 REPO_URL="https://github.com/quaxalber/bluetooth_2_usb.git"
 REPO_BRANCH="main"
 SERVICE_NAME="bluetooth_2_usb"
-RESTART=0
+RESTART=1
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
@@ -21,7 +21,7 @@ while [[ $# -gt 0 ]]; do
     --repo) REPO_URL="$2"; shift 2;;
     --branch) REPO_BRANCH="$2"; shift 2;;
     --service) SERVICE_NAME="$2"; shift 2;;
-    --restart) RESTART=1; shift;;
+    --no-restart) RESTART=0; shift;;
     -h|--help)
       cat <<'EOF'
 Usage: sudo ./update.sh [options]
@@ -29,7 +29,7 @@ Usage: sudo ./update.sh [options]
   --repo <url>         Git repo URL
   --branch <name>      Branch/tag (default: main)
   --service <name>     systemd service to restart
-  --restart            Restart service after update
+  --no-restart         Do not restart service after update
 EOF
       exit 0;;
     *) fail "Unknown option: $1";;

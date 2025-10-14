@@ -63,8 +63,10 @@ source "$VENV_DIR/bin/activate"
 python -V; pip install --upgrade pip wheel setuptools
 if [[ -f "${INSTALL_DIR}/requirements.txt" ]] ; then pip install -r "${INSTALL_DIR}/requirements.txt"; else warn "requirements.txt missing"; fi
 
+SERVICE_NAME="bluetooth_2_usb"
+RESTART=1
 if [[ $RESTART -eq 1 ]]; then
-  if command -v systemctl >/dev/null 2>&1 && systemctl list-unit-files | grep -q "^${SERVICE_NAME}.service"; then
+  if systemctl cat "${SERVICE_NAME}.service" >/dev/null 2>&1; then
     info "Restarting ${SERVICE_NAME}.service…"; systemctl restart "${SERVICE_NAME}.service"
     systemctl --no-pager --full status "${SERVICE_NAME}.service" || true
   else warn "Service ${SERVICE_NAME}.service not found"; fi

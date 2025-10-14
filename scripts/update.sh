@@ -10,7 +10,7 @@ warn(){ printf "${YELLOW}⚠ %s${NC}\n" "$*"; }
 fail(){ printf "${RED}✖ %s${NC}\n" "$*"; exit 1; }
 
 INSTALL_DIR="/opt/bluetooth_2_usb"
-REPO_URL="https://github.com/saepi/bluetooth_2_usb.git"
+REPO_URL="https://github.com/quaxalber/bluetooth_2_usb.git"
 REPO_BRANCH="main"
 SERVICE_NAME="bluetooth_2_usb"
 RESTART=0

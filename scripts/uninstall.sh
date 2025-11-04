@@ -54,7 +54,7 @@ PY
 }
 
 # Stop/disable service
-if command -v systemctl >/dev/null 2>&1 && systemctl list-unit-files | grep -q "^${SERVICE_NAME}.service"; then
+if systemctl list-unit-files --type=service | grep -Fq "${SERVICE_NAME}.service"; then
   info "Stopping ${SERVICE_NAME}.service…"
   systemctl stop "${SERVICE_NAME}.service" || true
   systemctl disable "${SERVICE_NAME}.service" || true

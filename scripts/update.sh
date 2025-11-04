@@ -64,7 +64,7 @@ python -V; pip install --upgrade pip wheel setuptools
 if [[ -f "${INSTALL_DIR}/requirements.txt" ]] ; then pip install -r "${INSTALL_DIR}/requirements.txt"; else warn "requirements.txt missing"; fi
 
 if [[ $RESTART -eq 1 ]]; then
-  if systemctl cat "${SERVICE_NAME}.service" >/dev/null 2>&1; then
+  if systemctl list-unit-files --type=service | grep -Fq "${SERVICE_NAME}.service"; then
     info "Restarting ${SERVICE_NAME}.service…"; systemctl restart "${SERVICE_NAME}.service"
     systemctl --no-pager --full status "${SERVICE_NAME}.service" || true
   else warn "Service ${SERVICE_NAME}.service not found"; fi

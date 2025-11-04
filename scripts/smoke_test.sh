@@ -48,7 +48,7 @@ else fail "Missing ${CMDLINE_TXT}"; EXIT_CODE=1; fi
 UDC="$(ls /sys/class/udc 2>/dev/null || true)"; [[ -n "$UDC" ]] && pass "UDC present: $(echo "$UDC" | tr '\n' ' ')" || { warn "No UDC visible"; EXIT_CODE=1; }
 [[ -d /sys/kernel/config/usb_gadget ]] && pass "configfs gadget path exists" || { warn "configfs gadget path missing"; EXIT_CODE=1; }
 
-if systemctl cat "${SERVICE_NAME}.service" >/dev/null 2>&1; then
+if systemctl list-unit-files --type=service | grep -Fq "${SERVICE_NAME}.service"; then
   systemctl is-active --quiet "${SERVICE_NAME}.service" && pass "systemd: ${SERVICE_NAME}.service is active" || { warn "systemd: service not active"; EXIT_CODE=1; }
 else warn "systemd: service not installed"; EXIT_CODE=1; fi
 

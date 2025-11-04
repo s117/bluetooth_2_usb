@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # bluetooth_2_usb — Debug Info Collector (GitHub Markdown)
-set -Eeuo pipefail
+set -Eeu
 IFS=$'\n\t'
 
 SERVICE_NAME="bluetooth_2_usb"; INSTALL_DIR="/opt/bluetooth_2_usb"; VENV_DIR="/opt/bluetooth_2_usb/venv"; DURATION=10

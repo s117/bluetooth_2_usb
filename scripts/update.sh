@@ -32,7 +32,7 @@ Usage: sudo ./update.sh [options]
   --no-restart         Do not restart service after update
 EOF
       exit 0;;
-    *) fail "Unknown option: $1"; exit 2;;
+    *) fail "Unknown option: $1";;
   esac
 done
 

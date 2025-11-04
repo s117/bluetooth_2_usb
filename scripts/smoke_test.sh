@@ -5,7 +5,7 @@ IFS=$'\n\t'
 
 RED=$'\033[0;31m'; GREEN=$'\033[0;32m'; YELLOW=$'\033[0;33m'; BLUE=$'\033[0;34m'; BOLD=$'\033[1m'; NC=$'\033[0m'
 pass(){ printf "${GREEN}✓ %s${NC}\n" "$*"; }
-fail(){ printf "${RED}✖ %s${NC}\n" "$*"; }
+fail(){ printf "${RED}✖ %s${NC}\n" "$*"; exit 1; }
 info(){ printf "${BLUE}ℹ %s${NC}\n" "$*"; }
 warn(){ printf "${YELLOW}⚠ %s${NC}\n" "$*"; }
 
@@ -26,7 +26,7 @@ case "$1" in
 Usage: sudo bash smoke_test.sh [--service bluetooth_2_usb] [--dir /opt/bluetooth_2_usb] [--venv /opt/bluetooth_2_usb/venv] [--verbose]
 EOF
       exit 0;;
-    *) fail "Unknown option: $1"; exit 2;;
+    *) fail "Unknown option: $1";;
   esac
 done
 

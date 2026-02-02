@@ -538,8 +538,8 @@ def move_mouse(event: RelEvent, gadget_manager: GadgetManager) -> None:
     if mouse is None:
         raise RuntimeError("Mouse gadget not initialized or manager not enabled.")
 
-    x, y, mwheel = get_mouse_movement(event)
-    mouse.move(x, y, mwheel)
+    x, y, mwheel, pan = get_mouse_movement(event)
+    mouse.move_ex(x, y, mwheel, pan)
 
 
 def send_key_event(event: KeyEvent, gadget_manager: GadgetManager) -> None:
